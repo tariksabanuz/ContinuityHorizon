@@ -9,7 +9,7 @@ them.
   where the block across the corner is missing.
 - **Glass panes**: the same, on the sides of the pane, between panes of the same colour.
 - **Bookshelves, cut and chiseled sandstone** (red too): joined left and right, into one long shelf or band.
-- **Sandstone and red sandstone**: a side with the same block above shows the smooth sandstone, so a wall or a
+- **Sandstone and red sandstone**: a side with the same block above shows the sandstone bottom (its cracked pattern without the band), so a wall or a
   pillar has no band between its blocks; the top row keeps its band.
 - A face whose neighbour's face is hidden (a block in front of it) does not join, so corners and steps stay framed.
 - Options > Mods > Connected Textures turns it on and off and each part on its own; the world is meshed again at
@@ -20,7 +20,7 @@ them.
 It hooks Horizon's section mesher (`Mesher::mesh_reusing`). After Horizon has made a section's quads, each face of
 a connecting block is cut, in its sprite's own space, into the thin strips along its edges (a sixteenth of the
 sprite: one pixel of a 16x16 texture), its corners and its middle. A strip along an edge that joins a neighbour
-shows the texture just inside the frame instead of the frame. Sandstone sides switch to the sandstone top sprite.
+shows the texture just inside the frame instead of the frame. Sandstone sides switch to the sandstone bottom sprite, and the tops and bottoms of stacked glass panes are left out.
 Light, ambient occlusion and colour are carried over smoothly.
 
 No texture is shipped: it works on the textures your game already has, and a resource pack that changes glass or

@@ -1,10 +1,10 @@
 use crate::ctm::{self, Method, V, EDGE, UV_STEPS};
 use std::collections::HashMap;
 
-// Sprite layers: glass 1, glass pane top 2, bookshelf 3, sandstone 4, sandstone top 5, red glass 6.
+// Sprite layers: glass 1, glass pane top 2, bookshelf 3, sandstone 4, sandstone bottom 5, red glass 6.
 fn table() -> std::sync::Arc<ctm::Rules> {
     let names = ["minecraft:air", "minecraft:glass", "minecraft:glass_pane", "minecraft:bookshelf", "minecraft:sandstone", "minecraft:red_stained_glass", "minecraft:stone"];
-    let layers: HashMap<&str, u16> = [("minecraft:block/glass", 1), ("minecraft:block/bookshelf", 3), ("minecraft:block/sandstone", 4), ("minecraft:block/sandstone_top", 5), ("minecraft:block/red_stained_glass", 6)].into_iter().collect();
+    let layers: HashMap<&str, u16> = [("minecraft:block/glass", 1), ("minecraft:block/bookshelf", 3), ("minecraft:block/sandstone", 4), ("minecraft:block/sandstone_bottom", 5), ("minecraft:block/glass_pane_top", 2), ("minecraft:block/red_stained_glass", 6)].into_iter().collect();
     ctm::rules([1, 2, 3], names.len(), &|id| names.get(id as usize).map(|s| s.to_string()), &|n| layers.get(n).copied())
 }
 
@@ -251,4 +251,24 @@ fn dump_wall() {
         }
     }
     std::fs::write("/tmp/claude-0/-home-claude/ca868743-7075-50c1-8188-0998b6cbda88/scratchpad/cont/wall.txt", s).unwrap();
+}
+
+#[test]
+fn stacked_panes_hide_the_edges_between_them() {
+    let r = table();
+    // The top of the lower pane's post (y 1, x/z 7..9), drawn with the pane's edge sprite.
+    let (a, b) = (7.0 / 16.0, 9.0 / 16.0);
+    let up = vec![
+        v([a, 1.0, a], [7.0 / 16.0, 7.0 / 16.0], 2),
+        v([a, 1.0, b], [7.0 / 16.0, 9.0 / 16.0], 2),
+        v([b, 1.0, b], [9.0 / 16.0, 9.0 / 16.0], 2),
+        v([b, 1.0, a], [9.0 / 16.0, 7.0 / 16.0], 2),
+    ];
+    let stacked = world(&[([0, 0, 0], PANE), ([0, 1, 0], PANE)]);
+    assert_eq!(ctm::process(&r, &up, &stacked), Some(Vec::new()));
+    let alone = world(&[([0, 0, 0], PANE)]);
+    assert!(ctm::process(&r, &up, &alone).is_none());
+    // Glass above is another block: the top stays.
+    let glass = world(&[([0, 0, 0], PANE), ([0, 1, 0], GLASS)]);
+    assert!(ctm::process(&r, &up, &glass).is_none());
 }

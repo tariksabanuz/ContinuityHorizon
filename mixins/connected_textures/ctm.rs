@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub const ID: &str = "connected_textures";
 pub const NAME: &str = "Connected Textures";
-pub const VERSION: &str = "0.1.1";
+pub const VERSION: &str = "0.1.2";
 pub const DESCRIPTION: &str = "By tariksabanuz. Glass, glass panes, bookshelves and sandstone connect to the same block beside them: \
 one frame round a whole window, one long bookshelf, sandstone walls without seams. Uses your own textures and resource packs.";
 
@@ -195,6 +195,9 @@ pub struct Group {
     pub part: u32,
     /// How wide the sprite's frame is on its high-u side (chiseled sandstone: three pixels).
     pub hi_u: f32,
+    /// A pane's edge sprite (`glass_pane_top`): its tops and bottoms between two panes are
+    /// left out, as vanilla's own culling would with a cullface on them.
+    pub edge: Option<u16>,
 }
 
 /// The table for one set of loaded resources: each block state's group (0: none), each group.
@@ -239,7 +242,7 @@ pub fn blocks() -> Vec<(String, String, Option<String>, Method, u32)> {
     for s in ["sandstone", "red_sandstone"] {
         v.push((format!("cut_{s}"), format!("cut_{s}"), None, Method::Horizontal, SANDSTONE));
         v.push((format!("chiseled_{s}"), format!("chiseled_{s}"), None, Method::Horizontal, SANDSTONE));
-        v.push((s.into(), s.into(), Some(format!("{s}_top")), Method::Top(0), SANDSTONE));
+        v.push((s.into(), s.into(), Some(format!("{s}_bottom")), Method::Top(0), SANDSTONE));
     }
     v
 }
@@ -277,7 +280,8 @@ pub fn rules(
             (m, _) => m,
         };
         let hi_u = if block.starts_with("chiseled_") { 3.0 * EDGE } else { EDGE };
-        groups.push(Group { method, tile: t, part, hi_u });
+        let edge = if method == Method::Pane { sprite(&format!("{block}_top")) } else { None };
+        groups.push(Group { method, tile: t, part, hi_u, edge });
         index.insert(format!("minecraft:{block}"), groups.len() as u16);
     }
     let mut by_state = vec![0u16; states];
@@ -289,9 +293,13 @@ pub fn rules(
             }
         }
     }
-    let mut tiles = vec![false; groups.iter().map(|g| usize::from(g.tile) + 1).max().unwrap_or(0)];
+    let most = groups.iter().map(|g| usize::from(g.tile.max(g.edge.unwrap_or(0))) + 1).max().unwrap_or(0);
+    let mut tiles = vec![false; most];
     for g in &groups {
         tiles[usize::from(g.tile)] = true;
+        if let Some(e) = g.edge {
+            tiles[usize::from(e)] = true;
+        }
     }
     let r = Arc::new(Rules { key, by_state, groups, tiles });
     *g = Some(r.clone());
@@ -384,6 +392,12 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
         return None;
     }
     let group = r.groups[usize::from(g - 1)];
+    if group.edge == Some(layer) {
+        // The top or bottom of a pane, on its block's edge, with the same pane over it: hidden.
+        let on_edge = (c[1] - cell[1] as f32).abs() < 1e-3 || (c[1] - cell[1] as f32 - 1.0).abs() < 1e-3;
+        let over = r.group(get(add(cell, n))) == g;
+        return (n[1] != 0 && on_edge && over && part_on(group.part)).then(Vec::new);
+    }
     if group.tile != layer || !part_on(group.part) {
         return None;
     }
