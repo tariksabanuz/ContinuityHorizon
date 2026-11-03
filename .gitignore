@@ -1,0 +1,4 @@
+target/
+test/t
+check/check.rs
+__pycache__/
