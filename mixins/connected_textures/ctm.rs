@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub const ID: &str = "connected_textures";
 pub const NAME: &str = "Connected Textures";
-pub const VERSION: &str = "0.1.0";
+pub const VERSION: &str = "0.1.1";
 pub const DESCRIPTION: &str = "By tariksabanuz. Glass, glass panes, bookshelves and sandstone connect to the same block beside them: \
 one frame round a whole window, one long bookshelf, sandstone walls without seams. Uses your own textures and resource packs.";
 
@@ -193,6 +193,8 @@ pub struct Group {
     /// The sprite layer of the faces that connect (the block's own texture).
     pub tile: u16,
     pub part: u32,
+    /// How wide the sprite's frame is on its high-u side (chiseled sandstone: three pixels).
+    pub hi_u: f32,
 }
 
 /// The table for one set of loaded resources: each block state's group (0: none), each group.
@@ -274,7 +276,8 @@ pub fn rules(
             },
             (m, _) => m,
         };
-        groups.push(Group { method, tile: t, part });
+        let hi_u = if block.starts_with("chiseled_") { 3.0 * EDGE } else { EDGE };
+        groups.push(Group { method, tile: t, part, hi_u });
         index.insert(format!("minecraft:{block}"), groups.len() as u16);
     }
     let mut by_state = vec![0u16; states];
@@ -440,9 +443,9 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
         let hi = uv.iter().map(|t| t[k]).fold(f32::NEG_INFINITY, f32::max);
         (lo, hi)
     };
-    let cuts = |(lo, hi): (f32, f32)| -> Vec<f32> {
+    let cuts = |(lo, hi): (f32, f32), far: f32| -> Vec<f32> {
         let mut c = vec![lo];
-        for x in [EDGE, 1.0 - EDGE] {
+        for x in [EDGE, 1.0 - far] {
             if x > lo + 1e-5 && x < hi - 1e-5 {
                 c.push(x);
             }
@@ -450,17 +453,17 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
         c.push(hi);
         c
     };
-    let (us, vs) = (cuts(range(0)), cuts(range(1)));
+    let (us, vs) = (cuts(range(0), group.hi_u), cuts(range(1), EDGE));
     // From sprite u (or v) to the quad's parameter along its edge.
     let u0 = uv[0][0];
     let v0 = uv[0][1];
     let (du, dv) = if u_on_a { (du_a, dv_b) } else { (du_b, dv_a) };
     let pu = |u: f32| (u - u0) / du;
     let pv = |v: f32| (v - v0) / dv;
-    let band = |x: f32| -> u8 {
+    let band = |x: f32, far: f32| -> u8 {
         if x < EDGE {
             0
-        } else if x > 1.0 - EDGE {
+        } else if x > 1.0 - far {
             2
         } else {
             1
@@ -469,10 +472,10 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
     let mut out = Vec::with_capacity(36);
     for wu in us.windows(2) {
         for wv in vs.windows(2) {
-            let (bu, bv) = (band((wu[0] + wu[1]) * 0.5), band((wv[0] + wv[1]) * 0.5));
+            let (bu, bv) = (band((wu[0] + wu[1]) * 0.5, group.hi_u), band((wv[0] + wv[1]) * 0.5, EDGE));
             let mut su = match bu {
                 0 if lo_u => EDGE,
-                2 if hi_u => -EDGE,
+                2 if hi_u => -group.hi_u,
                 _ => 0.0,
             };
             let mut sv = match bv {
