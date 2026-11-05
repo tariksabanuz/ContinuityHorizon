@@ -45,6 +45,9 @@ fn top(b: [i32; 3], layer: u16) -> Vec<V> {
     ]
 }
 
+/// How far a sampled texel may differ: the joined strips sit a little inside their pixels (`SEAM_INSET`).
+const TOL: f32 = 0.02;
+
 fn uvs(q: &[V]) -> Vec<[f32; 2]> {
     q.iter().map(|v| [f32::from(v.uv[0]) / UV_STEPS, f32::from(v.uv[1]) / UV_STEPS]).collect()
 }
@@ -85,12 +88,12 @@ fn glass_beside_glass_loses_the_frame_between() {
     assert!(out.len() > 4 && out.len() % 4 == 0);
     // The strip along u = 0 shows the texel just inside it now; the far edge keeps its frame.
     let s = sample(&out, [0.5 * EDGE, 0.5]).unwrap();
-    assert!((s[0] - 1.5 * EDGE).abs() < 1e-3, "{s:?}");
+    assert!((s[0] - 1.5 * EDGE).abs() < TOL, "{s:?}");
     let far = sample(&out, [1.0 - 0.5 * EDGE, 0.5]).unwrap();
-    assert!((far[0] - (1.0 - 0.5 * EDGE)).abs() < 1e-3, "{far:?}");
+    assert!((far[0] - (1.0 - 0.5 * EDGE)).abs() < TOL, "{far:?}");
     // The top and bottom frame stay along the joined edge too.
     let corner = sample(&out, [0.5 * EDGE, 0.5 * EDGE]).unwrap();
-    assert!((corner[1] - 0.5 * EDGE).abs() < 1e-3 && (corner[0] - 1.5 * EDGE).abs() < 1e-3, "{corner:?}");
+    assert!((corner[1] - 0.5 * EDGE).abs() < TOL && (corner[0] - 1.5 * EDGE).abs() < TOL, "{corner:?}");
     // Same area, same winding as the face (normal still -z).
     let area: f32 = out.chunks(4).map(|q| {
         let a = [q[1].pos[0] - q[0].pos[0], q[1].pos[1] - q[0].pos[1], q[1].pos[2] - q[0].pos[2]];
@@ -113,13 +116,13 @@ fn a_window_of_four_keeps_inner_corners_only_where_the_corner_is_missing() {
     let out = ctm::process(&r, &north([0, 0, 0], 1), &w).expect("joined");
     // Towards +x is u = 0, towards +y is v = 0: that corner keeps its frame pixel.
     let c = sample(&out, [0.5 * EDGE, 0.5 * EDGE]).unwrap();
-    assert!((c[0] - 0.5 * EDGE).abs() < 1e-3 && (c[1] - 0.5 * EDGE).abs() < 1e-3, "{c:?}");
+    assert!((c[0] - 0.5 * EDGE).abs() < TOL && (c[1] - 0.5 * EDGE).abs() < TOL, "{c:?}");
     // With the corner block there, it is gone too.
     let blocks = [([0, 0, 0], GLASS), ([1, 0, 0], GLASS), ([0, 1, 0], GLASS), ([1, 1, 0], GLASS)];
     let w = world(&blocks);
     let out = ctm::process(&r, &north([0, 0, 0], 1), &w).expect("joined");
     let c = sample(&out, [0.5 * EDGE, 0.5 * EDGE]).unwrap();
-    assert!((c[0] - 1.5 * EDGE).abs() < 1e-3 && (c[1] - 1.5 * EDGE).abs() < 1e-3, "{c:?}");
+    assert!((c[0] - 1.5 * EDGE).abs() < TOL && (c[1] - 1.5 * EDGE).abs() < TOL, "{c:?}");
 }
 
 #[test]
@@ -159,7 +162,7 @@ fn bookshelves_join_sideways_only() {
     let w = world(&[([0, 0, 0], SHELF), ([1, 0, 0], SHELF)]);
     let out = ctm::process(&r, &north([0, 0, 0], 3), &w).expect("sideways");
     let s = sample(&out, [0.5 * EDGE, 0.5 * EDGE]).unwrap();
-    assert!((s[0] - 1.5 * EDGE).abs() < 1e-3 && (s[1] - 0.5 * EDGE).abs() < 1e-3, "{s:?}");
+    assert!((s[0] - 1.5 * EDGE).abs() < TOL && (s[1] - 0.5 * EDGE).abs() < TOL, "{s:?}");
     // Their tops are planks: left alone.
     assert!(ctm::process(&r, &top([0, 0, 0], 3), &w).is_none());
 }
@@ -271,4 +274,22 @@ fn stacked_panes_hide_the_edges_between_them() {
     // Glass above is another block: the top stays.
     let glass = world(&[([0, 0, 0], PANE), ([0, 1, 0], GLASS)]);
     assert!(ctm::process(&r, &up, &glass).is_none());
+}
+
+#[test]
+fn a_joined_strip_does_not_sample_on_the_edge_between_two_pixels() {
+    let r = table();
+    let w = world(&[([0, 0, 0], GLASS), ([1, 0, 0], GLASS)]);
+    let out = ctm::process(&r, &north([0, 0, 0], 1), &w).expect("joined");
+    // The strip along the joined edge shows the texel just inside the frame: its u stays inside
+    // that texel, so smooth sampling never mixes the frame pixel in (a thin line along the join).
+    let strip: Vec<f32> = out
+        .chunks(4)
+        .filter(|q| q.iter().all(|v| v.pos[0] > 1.0 - EDGE - 1e-4))
+        .flat_map(|q| q.iter().map(|v| f32::from(v.uv[0]) / UV_STEPS))
+        .collect();
+    assert!(!strip.is_empty());
+    for u in strip {
+        assert!(u > EDGE + ctm::SEAM_INSET - 1e-4 && u < 2.0 * EDGE - ctm::SEAM_INSET + 1e-4, "{u}");
+    }
 }

@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub const ID: &str = "connected_textures";
 pub const NAME: &str = "Connected Textures";
-pub const VERSION: &str = "0.1.3";
+pub const VERSION: &str = "0.1.4";
 pub const DESCRIPTION: &str = "By tariksabanuz. Glass, glass panes, bookshelves and sandstone connect to the same block beside them: \
 one frame round a whole window, one long bookshelf, sandstone walls without seams. Uses your own textures and resource packs.";
 
@@ -38,6 +38,10 @@ static DIR: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
 
 /// The sprite's frame: a sixteenth of it.
 pub const EDGE: f32 = 1.0 / 16.0;
+/// How far in from its edges a joined strip samples its sprite: about two thirds of a pixel of a
+/// 64 pixel layer. A strip begins exactly on the edge between two pixels of the sprite, where the
+/// game's smooth sampling mixes in the frame pixel beside it: a thin line along every join.
+pub const SEAM_INSET: f32 = 320.0 / 32768.0;
 /// `TerrainVertex` UV steps per sprite.
 pub const UV_STEPS: f32 = 32768.0;
 /// The bit of a terrain vertex's layer that marks it opaque.
@@ -513,7 +517,14 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
             };
             for (a, b) in [(a_lo, b_lo), (a_hi, b_lo), (a_hi, b_hi), (a_lo, b_hi)] {
                 let mut v = lerp(q, a, b);
-                let t = [f32::from(v.uv[0]) / UV_STEPS + su, f32::from(v.uv[1]) / UV_STEPS + sv];
+                let mut t = [f32::from(v.uv[0]) / UV_STEPS + su, f32::from(v.uv[1]) / UV_STEPS + sv];
+                // A strip that shows the texture beside the frame stays inside its own pixels.
+                if su != 0.0 {
+                    t[0] = t[0].clamp(wu[0] + su + SEAM_INSET, wu[1] + su - SEAM_INSET);
+                }
+                if sv != 0.0 {
+                    t[1] = t[1].clamp(wv[0] + sv + SEAM_INSET, wv[1] + sv - SEAM_INSET);
+                }
                 v.uv = t.map(|x| (x * UV_STEPS).round().clamp(0.0, 65535.0) as u16);
                 out.push(v);
             }
