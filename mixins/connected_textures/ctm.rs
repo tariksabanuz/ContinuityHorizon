@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub const ID: &str = "connected_textures";
 pub const NAME: &str = "Connected Textures";
-pub const VERSION: &str = "0.1.2";
+pub const VERSION: &str = "0.1.3";
 pub const DESCRIPTION: &str = "By tariksabanuz. Glass, glass panes, bookshelves and sandstone connect to the same block beside them: \
 one frame round a whole window, one long bookshelf, sandstone walls without seams. Uses your own textures and resource packs.";
 
