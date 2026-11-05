@@ -293,3 +293,21 @@ fn a_joined_strip_does_not_sample_on_the_edge_between_two_pixels() {
         assert!(u > EDGE + ctm::SEAM_INSET - 1e-4 && u < 2.0 * EDGE - ctm::SEAM_INSET + 1e-4, "{u}");
     }
 }
+
+#[test]
+fn no_cut_piece_samples_on_the_edge_between_two_pixels() {
+    let r = table();
+    let w = world(&[([0, 0, 0], GLASS), ([1, 0, 0], GLASS), ([0, 1, 0], GLASS)]);
+    let out = ctm::process(&r, &north([0, 0, 0], 1), &w).expect("joined");
+    // Each piece's UVs keep clear of the sprite's pixel edges (16 pixels), where the frame pixel
+    // beside a cut would be mixed in.
+    for q in out.chunks(4) {
+        for v in q {
+            for k in 0..2 {
+                let x = f32::from(v.uv[k]) / UV_STEPS * 16.0;
+                let d = (x - x.round()).abs();
+                assert!(d > 0.2, "uv {x} lies on a pixel edge");
+            }
+        }
+    }
+}
