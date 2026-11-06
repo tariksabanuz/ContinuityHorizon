@@ -1,10 +1,10 @@
 [mod]
 id = "connected_textures"
-version = "0.1.2"
+version = "0.1.5"
 priority = 100
 
 [compatibility]
-horizon_revision = "9d979caa48a3bb58203319b9ea044db58c38e0d8"
+horizon_revision = "f319701e8c9ab657ff562250b3ba07b2d654e3bc"
 
 # Which blocks connect, how a face is joined to its neighbours, and the settings. In the render
 # library, beside the section mesher.
@@ -14,6 +14,25 @@ file = "crates/horizon-client-render/src/lib.rs"
 name = "native_connected_textures"
 source = "ctm.rs"
 visibility = "pub"
+
+# DirectX 12 (FXC): Horizon's terrain shader made ready for FXC; the game crashed at its start there.
+[[module]]
+id = "fxc_runtime"
+file = "crates/horizon-client-render/src/lib.rs"
+name = "native_connected_textures_fxc"
+source = "fxc_runtime.rs"
+visibility = "pub"
+
+[[injection]]
+id = "fxc"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client_render::gfx::reuse::On<'_>::create_shader_module"
+helper = "fxc.rs"
+bindings = [
+  { name = "this", ty = "&On<'_>", value = "self" },
+  { name = "descriptor", ty = "&wgpu::ShaderModuleDescriptor<'_>", value = "&descriptor" },
+]
 
 # Each section Horizon meshes: its glass, panes, bookshelves and sandstone are joined up.
 [[injection]]

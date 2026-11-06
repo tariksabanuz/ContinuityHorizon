@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub const ID: &str = "connected_textures";
 pub const NAME: &str = "Connected Textures";
-pub const VERSION: &str = "0.1.2";
+pub const VERSION: &str = "0.1.5";
 pub const DESCRIPTION: &str = "By tariksabanuz. Glass, glass panes, bookshelves and sandstone connect to the same block beside them: \
 one frame round a whole window, one long bookshelf, sandstone walls without seams. Uses your own textures and resource packs.";
 
@@ -38,6 +38,12 @@ static DIR: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
 
 /// The sprite's frame: a sixteenth of it.
 pub const EDGE: f32 = 1.0 / 16.0;
+/// How far in from its edges every cut piece samples its sprite: one pixel of a 64 pixel layer
+/// (half a pixel of its first mipmap). A piece begins exactly on the edge between two pixels of
+/// the sprite, and the game's smooth sampling mixes in the pixel on the other side, which beside a
+/// join is the frame: a thin line along every cut. The sprite's pixels are 4 layer pixels wide, so
+/// this changes no colour.
+pub const SEAM_INSET: f32 = 512.0 / 32768.0;
 /// `TerrainVertex` UV steps per sprite.
 pub const UV_STEPS: f32 = 32768.0;
 /// The bit of a terrain vertex's layer that marks it opaque.
@@ -513,7 +519,12 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
             };
             for (a, b) in [(a_lo, b_lo), (a_hi, b_lo), (a_hi, b_hi), (a_lo, b_hi)] {
                 let mut v = lerp(q, a, b);
-                let t = [f32::from(v.uv[0]) / UV_STEPS + su, f32::from(v.uv[1]) / UV_STEPS + sv];
+                let mut t = [f32::from(v.uv[0]) / UV_STEPS + su, f32::from(v.uv[1]) / UV_STEPS + sv];
+                // Every piece stays inside its own pixels, so none mixes in the pixel beyond its cut.
+                let (ulo, uhi) = (wu[0].min(wu[1]) + su, wu[0].max(wu[1]) + su);
+                let (vlo, vhi) = (wv[0].min(wv[1]) + sv, wv[0].max(wv[1]) + sv);
+                t[0] = t[0].clamp(ulo + SEAM_INSET, uhi - SEAM_INSET);
+                t[1] = t[1].clamp(vlo + SEAM_INSET, vhi - SEAM_INSET);
                 v.uv = t.map(|x| (x * UV_STEPS).round().clamp(0.0, 65535.0) as u16);
                 out.push(v);
             }
