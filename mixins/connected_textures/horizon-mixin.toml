@@ -4,7 +4,7 @@ version = "0.1.5"
 priority = 100
 
 [compatibility]
-horizon_revision = "6475f62f3c834b7489e1816bf47f47ea5eb2b879"
+horizon_revision = "f319701e8c9ab657ff562250b3ba07b2d654e3bc"
 
 # Which blocks connect, how a face is joined to its neighbours, and the settings. In the render
 # library, beside the section mesher.
