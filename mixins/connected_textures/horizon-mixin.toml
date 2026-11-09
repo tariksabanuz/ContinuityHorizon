@@ -1,10 +1,10 @@
 [mod]
 id = "connected_textures"
-version = "0.1.6"
+version = "0.1.7"
 priority = 100
 
 [compatibility]
-horizon_revision = "66f3981f522b24c250b21523a70080965b940424"
+horizon_revision = "fdc87aecdbd116bf1e08adcd062fcbaea8c2e2ca"
 
 # Which blocks connect, how a face is joined to its neighbours, and the settings. In the render
 # library, beside the section mesher.
