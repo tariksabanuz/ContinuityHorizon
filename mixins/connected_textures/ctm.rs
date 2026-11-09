@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub const ID: &str = "connected_textures";
 pub const NAME: &str = "Connected Textures";
-pub const VERSION: &str = "0.1.5";
+pub const VERSION: &str = "0.1.6";
 pub const DESCRIPTION: &str = "By tariksabanuz. Glass, glass panes, bookshelves and sandstone connect to the same block beside them: \
 one frame round a whole window, one long bookshelf, sandstone walls without seams. Uses your own textures and resource packs.";
 
@@ -48,6 +48,16 @@ pub const SEAM_INSET: f32 = 512.0 / 32768.0;
 pub const UV_STEPS: f32 = 32768.0;
 /// The bit of a terrain vertex's layer that marks it opaque.
 const OPAQUE: u16 = 0x8000;
+
+/// `x` kept `SEAM_INSET` inside the piece `lo..hi` of the sprite. The inset is at most half of the
+/// piece's width, so a piece narrower than twice the inset (a resource pack's model face that only
+/// uses a sliver of its sprite) is held to its middle instead of getting a lower bound above its
+/// upper one, which `f32::clamp` panics on. Never panics, whatever the numbers are.
+pub fn seam_clamp(x: f32, lo: f32, hi: f32) -> f32 {
+    let inset = SEAM_INSET.min((hi - lo).max(0.0) * 0.5);
+    let (a, b) = (lo + inset, hi - inset);
+    if a <= b { x.clamp(a, b) } else { x }
+}
 
 pub fn enabled() -> bool {
     ON.load(Ordering::Relaxed) && ACTIVE.load(Ordering::Relaxed) && PARTS.load(Ordering::Relaxed) != 0
@@ -523,8 +533,8 @@ fn connect(r: &Rules, q: &[V; 4], at: &dyn Fn(i32, i32, i32) -> u32) -> Option<V
                 // Every piece stays inside its own pixels, so none mixes in the pixel beyond its cut.
                 let (ulo, uhi) = (wu[0].min(wu[1]) + su, wu[0].max(wu[1]) + su);
                 let (vlo, vhi) = (wv[0].min(wv[1]) + sv, wv[0].max(wv[1]) + sv);
-                t[0] = t[0].clamp(ulo + SEAM_INSET, uhi - SEAM_INSET);
-                t[1] = t[1].clamp(vlo + SEAM_INSET, vhi - SEAM_INSET);
+                t[0] = seam_clamp(t[0], ulo, uhi);
+                t[1] = seam_clamp(t[1], vlo, vhi);
                 v.uv = t.map(|x| (x * UV_STEPS).round().clamp(0.0, 65535.0) as u16);
                 out.push(v);
             }

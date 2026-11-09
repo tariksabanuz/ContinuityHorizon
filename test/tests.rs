@@ -1,4 +1,4 @@
-use crate::ctm::{self, Method, V, EDGE, UV_STEPS};
+use crate::ctm::{self, Method, V, EDGE, SEAM_INSET, UV_STEPS};
 use std::collections::HashMap;
 
 // Sprite layers: glass 1, glass pane top 2, bookshelf 3, sandstone 4, sandstone bottom 5, red glass 6.
@@ -307,6 +307,62 @@ fn no_cut_piece_samples_on_the_edge_between_two_pixels() {
                 let x = f32::from(v.uv[k]) / UV_STEPS * 16.0;
                 let d = (x - x.round()).abs();
                 assert!(d > 0.2, "uv {x} lies on a pixel edge");
+            }
+        }
+    }
+}
+
+/// The north face of the block at `b` with a model's UVs: u from `u0` (at x + 1) to `u1` (at x), v
+/// from `v0` (top) to `v1` (bottom). A resource pack's model can use any part of its sprite.
+fn north_uv(b: [i32; 3], layer: u16, u0: f32, u1: f32, v0: f32, v1: f32) -> Vec<V> {
+    let [x, y, z] = b.map(|k| k as f32);
+    vec![
+        v([x + 1.0, y + 1.0, z], [u0, v0], layer),
+        v([x + 1.0, y, z], [u0, v1], layer),
+        v([x, y, z], [u1, v1], layer),
+        v([x, y + 1.0, z], [u1, v0], layer),
+    ]
+}
+
+#[test]
+fn the_seam_inset_never_exceeds_half_a_pieces_width() {
+    // A wide piece keeps the whole inset on both sides.
+    assert!((ctm::seam_clamp(0.0, 0.25, 0.75) - (0.25 + SEAM_INSET)).abs() < 1e-6);
+    assert!((ctm::seam_clamp(1.0, 0.25, 0.75) - (0.75 - SEAM_INSET)).abs() < 1e-6);
+    // A piece narrower than twice the inset is held to its middle, never outside it, no panic.
+    let (lo, hi) = (0.99, 1.0);
+    for x in [0.0, 0.99, 0.995, 1.0, 2.0] {
+        let t = ctm::seam_clamp(x, lo, hi);
+        assert!((lo..=hi).contains(&t) && (t - 0.995).abs() < 1e-6, "{x} -> {t}");
+    }
+    // Empty, reversed and not-a-number pieces do not panic either.
+    assert_eq!(ctm::seam_clamp(0.5, 0.5, 0.5), 0.5);
+    let _ = ctm::seam_clamp(0.5, 0.75, 0.25);
+    let _ = ctm::seam_clamp(0.5, f32::NAN, 1.0);
+    let _ = ctm::seam_clamp(f32::NAN, 0.0, 1.0);
+}
+
+#[test]
+fn a_narrow_uv_face_beside_glass_is_cut_without_panicking() {
+    let r = table();
+    // Glass at x 0 and x 1; the face of x 0 only uses U 0.99..1.0 of its sprite (a 0.01 wide
+    // sliver, under twice SEAM_INSET), and one with a sliver in V as well.
+    let blocks = [([0, 0, 0], GLASS), ([1, 0, 0], GLASS), ([0, 1, 0], GLASS)];
+    let w = world(&blocks);
+    for q in [
+        north_uv([0, 0, 0], 1, 0.99, 1.0, 0.0, 1.0),
+        north_uv([0, 0, 0], 1, 0.0, 1.0, 0.99, 1.0),
+        north_uv([0, 0, 0], 1, 0.99, 1.0, 0.99, 1.0),
+        north_uv([0, 0, 0], 1, 0.5, 0.5, 0.5, 0.5),
+    ] {
+        let Some(out) = ctm::process(&r, &q, &w) else { continue };
+        assert!(out.len() % 4 == 0);
+        // Every vertex still samples inside the part of the sprite the face uses.
+        let (lo, hi) = (uvs(&q).iter().fold([9.0, 9.0], |a, t| [f32::min(a[0], t[0]), f32::min(a[1], t[1])]),
+                        uvs(&q).iter().fold([-9.0, -9.0], |a, t| [f32::max(a[0], t[0]), f32::max(a[1], t[1])]));
+        for t in uvs(&out) {
+            for k in 0..2 {
+                assert!(t[k] >= lo[k] - 2.0 / UV_STEPS && t[k] <= hi[k] + 2.0 / UV_STEPS, "{t:?} outside {lo:?}..{hi:?}");
             }
         }
     }
